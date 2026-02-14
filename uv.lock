@@ -14,7 +14,7 @@ dependencies = [
     { name = "bm25s" },
     { name = "faiss-cpu" },
     { name = "onnxruntime" },
-    { name = "pywhispercpp" },
+    { name = "pywhispercpp", extra = ["examples"] },
     { name = "scikit-learn" },
     { name = "sherpa-onnx" },
     { name = "sherpa-onnx-bin" },
@@ -29,7 +29,7 @@ requires-dist = [
     { name = "bm25s", specifier = ">=0.2.14" },
     { name = "faiss-cpu", specifier = ">=1.13.2" },
     { name = "onnxruntime", specifier = ">=1.24.1" },
-    { name = "pywhispercpp", specifier = ">=1.4.1" },
+    { name = "pywhispercpp", extras = ["examples"], specifier = ">=1.4.1" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "sherpa-onnx", specifier = ">=1.12.24" },
     { name = "sherpa-onnx-bin", specifier = ">=1.12.24" },
@@ -582,6 +582,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/02/e5/121ee70e530016df92229389872a307bdde36e34cefdf210b29772db7506/pywhispercpp-1.4.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:bf93a678737668f3988068638fb560db9a34e1a6f6461b9dd90dfb2456559e53", size = 3556784, upload-time = "2025-12-30T03:01:59.553Z" },
 ]
 
+[package.optional-dependencies]
+examples = [
+    { name = "sounddevice" },
+    { name = "webrtcvad" },
+]
+
 [[package]]
 name = "pyyaml"
 version = "6.0.3"
@@ -985,3 +991,9 @@ sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
 ]
+
+[[package]]
+name = "webrtcvad"
+version = "2.0.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/34/e2de2d97f3288512b9ea56f92e7452f8207eb5a0096500badf9dfd48f5e6/webrtcvad-2.0.10.tar.gz", hash = "sha256:f1bed2fb25b63fb7b1a55d64090c993c9c9167b28485ae0bcdd81cf6ede96aea", size = 66156, upload-time = "2017-01-07T23:05:18.732Z" }

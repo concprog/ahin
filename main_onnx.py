@@ -7,7 +7,7 @@ from ahin.voice_assistant import VoiceAssistant
 from ahin.vad import VoiceActivityDetector
 from ahin.asr import WhisperASR
 from ahin.tts import PiperTTS
-from ahin.strats.default import DefaultResponseStrategy
+from ahin.strats.conversational import ConversationalStrategy
 
 
 def create_custom_config() -> Dict[str, Any]:
@@ -59,10 +59,10 @@ def main():
         vad = VoiceActivityDetector(config)
         asr = WhisperASR(config)
         tts = PiperTTS(config)
-        response_strategy = DefaultResponseStrategy(config)
+        response_strategy = ConversationalStrategy(config)
         
-        from ahin.voice_assistant_fast import VoiceAssistantFast
-        assistant = VoiceAssistantFast(config, tts, response_strategy)
+        from ahin.voice_assistant import VoiceAssistant
+        assistant = VoiceAssistant(config, vad, asr, tts, response_strategy)
         assistant.run()
     except Exception as e:
         print(f"Error initializing components: {e}")

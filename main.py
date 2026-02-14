@@ -7,7 +7,7 @@ from ahin.voice_assistant import VoiceAssistant
 from ahin.vad import VoiceActivityDetector
 from ahin.asr import WhisperASR
 from ahin.tts import PiperTTS
-from ahin.strats.default import DefaultResponseStrategy
+
 
 
 def create_custom_config() -> Dict[str, Any]:
@@ -59,7 +59,8 @@ def main():
         vad = VoiceActivityDetector(config)
         asr = WhisperASR(config)
         tts = PiperTTS(config)
-        response_strategy = DefaultResponseStrategy(config)
+        from ahin.strats.conversational import ConversationalStrategy
+        response_strategy = ConversationalStrategy(config)
         
         from ahin.voice_assistant_fast import VoiceAssistantFast
         # Using VoiceAssistantFast as requested
