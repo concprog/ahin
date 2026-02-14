@@ -70,20 +70,11 @@ class VoiceAssistantFast:
         """Run the pywhispercpp assistant."""
         print("Initializing pywhispercpp Assistant...")
         
-        # Extract settings from config if available, otherwise use defaults
-        # Note: pywhispercpp Assistant config is passed via init args
-        model_name = "tiny.en" # Default, maybe map from config if possible, but pywhispercpp models are different names
-        
-        # We can try to map config['asr']['language'] to a model if we want, 
-        # but usually pywhispercpp uses model names like 'base', 'small', etc.
-        # For now, we'll stick to a default or let user configure it via a specific key if we added one.
-        # Let's use 'base' as a reasonable default for better accuracy than tiny.
         
         self.assistant = Assistant(
             commands_callback=self._command_callback,
             n_threads=self.config.get("asr", {}).get("num_threads", 4),
-            model="small", # hardcoded for better quality than tiny, matches our previous config intent roughly
-            # input_device=... # We could map this if we knew the ID
+            model="./models/ggml-base-hi.bin", 
             silence_threshold=16, # Default
             block_duration=30     # Default
         )
