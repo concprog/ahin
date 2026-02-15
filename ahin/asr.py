@@ -32,7 +32,7 @@ class WhisperASR:
             task=asr_cfg["task"],
             debug=asr_cfg["debug"],
         )
-        self.sample_rate = 16000
+        self.sample_rate = asr_cfg.get("sample_rate", 16000)
         
     def transcribe(self, audio: np.ndarray) -> str:
         """

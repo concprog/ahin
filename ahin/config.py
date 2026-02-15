@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
         "whisper_encoder": "./models/sherpa-onnx-whisper-small/small-encoder.onnx",
         "whisper_decoder": "./models/sherpa-onnx-whisper-small/small-decoder.onnx",
         "whisper_tokens": "./models/sherpa-onnx-whisper-small/small-tokens.txt",
-        "whisper_cpp": "./models/ggml-base-hi.bin",
+        "whisper_cpp": "./models/whisper-tiny-vaani-ggml.bin",
         "vits_model": "./models/vits-piper-hi_IN-rohan-medium/hi_IN-rohan-medium.onnx",
         "vits_tokens": "./models/vits-piper-hi_IN-rohan-medium/tokens.txt",
         "vits_data_dir": "./models/vits-piper-hi_IN-rohan-medium/espeak-ng-data",
@@ -24,8 +24,8 @@ DEFAULT_CONFIG = {
         "sample_rate": 16000,
         "buffer_size_seconds": 20,
         "min_silence_duration": 0.5,
-        "min_speech_duration": 0.25,
-        "threshold": 0.4,
+        "min_speech_duration": 0.1,
+        "threshold": 0.6,
     },
     
     # ASR configuration
@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
         "task": "transcribe",  # or "translate"
         "num_threads": 4,
         "debug": False,
+        "sample_rate": 16000,
     },
     
     # TTS configuration
@@ -41,11 +42,12 @@ DEFAULT_CONFIG = {
         "num_threads": 4,
         "speed": 1.1,
         "debug": False,
+        "sample_rate": 22050,
     },
     
     # Audio I/O configuration
     "audio": {
-        "sample_rate": 16000,
+        "sample_rate": 24000,
         "chunk_duration": 0.1,  # 100ms chunks
         "channels": 1,
     },

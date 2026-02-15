@@ -1,4 +1,3 @@
-
 import sys
 import queue
 import time
@@ -11,6 +10,12 @@ try:
     import sounddevice as sd
 except ImportError:
     print("Please install sounddevice: pip install sounddevice")
+    sys.exit(-1)
+
+try:
+    import soxr
+except ImportError:
+    print("Please install soxr: pip install soxr")
     sys.exit(-1)
 
 from pywhispercpp.model import Model
@@ -39,16 +44,32 @@ class VoiceAssistantFast:
         self.response_strategy = response_strategy
         
         # Audio Configuration
-        self.sample_rate = 16000
-        self.block_size = int(self.sample_rate * 0.03) # 30ms block
+        self.input_sample_rate = config["audio"].get("sample_rate", 16000)
+        self.asr_sample_rate = 16000  # ASR always requires 16kHz
         
-        # VAD
+        # Determine if resampling is needed
+        self.needs_resampling = self.input_sample_rate != self.asr_sample_rate
+        
+        if self.needs_resampling:
+            print(f"Audio resampling enabled: {self.input_sample_rate}Hz -> {self.asr_sample_rate}Hz")
+            # Initialize streaming resampler for real-time processing
+            self.resampler = soxr.ResampleStream(
+                self.input_sample_rate,
+                self.asr_sample_rate,
+                1,  # mono channel
+                dtype='float32',
+                quality='HQ'  # High quality - fast enough for real-time
+            )
+        else:
+            self.resampler = None
+        
+        self.block_size = int(self.input_sample_rate * 0.03)  # 30ms block at input rate
+        
+        # VAD - operates at ASR sample rate
         self.vad = VoiceActivityDetector(config)
         self.audio_queue = queue.Queue()
         
         # ASR
-        # Using a default GGML model path or one from config if it existed.
-        # The user's previous code used various defaults. We'll stick to a reasonable default.
         model_path = config.get("models", {}).get("whisper_cpp", "./models/ggml-base-hi.bin")
         n_threads = config.get("asr", {}).get("num_threads", 4)
         
@@ -63,6 +84,28 @@ class VoiceAssistantFast:
                                
         self.is_running = False
 
+    def _resample_audio(self, audio_data: np.ndarray) -> np.ndarray:
+        """
+        Resample audio from input sample rate to ASR sample rate using SoXR.
+        
+        Args:
+            audio_data: Input audio array at input_sample_rate
+            
+        Returns:
+            Resampled audio array at asr_sample_rate
+        """
+        if not self.needs_resampling:
+            return audio_data
+        
+        # Ensure float32 dtype for soxr
+        if audio_data.dtype != np.float32:
+            audio_data = audio_data.astype(np.float32)
+        
+        # Use streaming resampler for real-time processing
+        resampled = self.resampler.resample_chunk(audio_data, last=False)
+        
+        return resampled
+
     def _audio_callback(self, indata, frames, time, status):
         """
         Audio callback for sounddevice.
@@ -76,7 +119,7 @@ class VoiceAssistantFast:
 
     def _process_audio(self):
         """
-        Process audio from queue: VAD -> Accumulate -> Transcribe
+        Process audio from queue: Resample -> VAD -> Accumulate -> Transcribe
         """
         print("Listening...")
         
@@ -86,11 +129,13 @@ class VoiceAssistantFast:
                 # Using a timeout to allow checking self.is_running occasionally
                 indata = self.audio_queue.get(timeout=0.1)
                 
-                # Flatten and process for VAD
-                # vad.py accepts numpy array. Sherpa VAD expects flat array.
+                # Flatten
                 audio_data = indata.flatten()
                 
-                # Feed to VAD
+                # Resample if needed (input_rate -> 16kHz)
+                audio_data = self._resample_audio(audio_data)
+                
+                # Feed to VAD (now at 16kHz)
                 self.vad.accept_waveform(audio_data)
                 
                 # Check for detected speech segments
@@ -107,11 +152,12 @@ class VoiceAssistantFast:
     def _transcribe_segment(self, audio_segment):
         """
         Transcribe a speech segment using pywhispercpp.
+        
+        Args:
+            audio_segment: Audio at 16kHz (ASR sample rate)
         """
-        # pywhispercpp expects float array.
-        # Transcribe
         try:
-            # We can pass the segment directly
+            # Audio segment is already at 16kHz from VAD output
             self.asr_model.transcribe(audio_segment, new_segment_callback=self._on_transcription)
         except Exception as e:
             print(f"Transcription error: {e}")
@@ -131,27 +177,19 @@ class VoiceAssistantFast:
         
         if response:
             # TTS
-            # Note: This blocks the processing loop, which is actually good 
-            # because we don't want to listen to our own voice.
-            # However, sounddevice stream is still running in background and determining VAD.
-            # We might want to assume the user IS listening to the TTS and pause processing?
-            # But the VAD is robust enough usually.
-            
-            # Simple approach: Stop processing queue while speaking?
-            # Or just let it run. If we have echo cancellation it's fine. 
-            # Without it, we might trigger ourselves.
-            # Let's simple play.
-            
             result = self.tts.synthesize(response)
             if result:
                 audio, sample_rate = result
                 print(f"[TTS] Playing...")
                 sd.play(audio, sample_rate)
                 sd.wait()
-                # Clear queue after speaking to avoid processing eco
+                # Clear queue after speaking to avoid processing echo
                 with self.audio_queue.mutex:
                     self.audio_queue.queue.clear()
                 self.vad.flush()
+                # Reset resampler state if using streaming resampler
+                if self.resampler is not None:
+                    self.resampler.clear()
 
     def run(self):
         """Start the assistant."""
@@ -162,9 +200,9 @@ class VoiceAssistantFast:
         process_thread.start()
         
         try:
-            # Start Audio Stream
+            # Start Audio Stream at input sample rate
             with sd.InputStream(channels=1,
-                                samplerate=self.sample_rate,
+                                samplerate=self.input_sample_rate,
                                 blocksize=self.block_size,
                                 callback=self._audio_callback):
                 print("Press Ctrl+C to stop...")

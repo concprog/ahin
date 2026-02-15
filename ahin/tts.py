@@ -25,7 +25,7 @@ class PiperTTS:
         tts_cfg = config["tts"]
         
         self.speed = tts_cfg["speed"]
-        self.sample_rate = 22050  # Piper default sample rate
+        self.sample_rate = tts_cfg.get("sample_rate", 22050)  # Piper default sample rate
         
         self.config = sherpa_onnx.OfflineTtsConfig(
             model=sherpa_onnx.OfflineTtsModelConfig(
