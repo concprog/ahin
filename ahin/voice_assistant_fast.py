@@ -1,8 +1,11 @@
 
 import sys
-from typing import Dict, Any, Optional
-import threading
 import queue
+import time
+import threading
+import logging
+from typing import Dict, Any, Optional
+import numpy as np
 
 try:
     import sounddevice as sd
@@ -10,15 +13,13 @@ except ImportError:
     print("Please install sounddevice: pip install sounddevice")
     sys.exit(-1)
 
-import numpy as np
-from pywhispercpp.examples.assistant import Assistant
-
+from pywhispercpp.model import Model
+from .vad import VoiceActivityDetector
 from .core import PiperTTSProtocol, ResponseStrategyProtocol
 
 class VoiceAssistantFast:
     """
-    Voice Assistant using pywhispercpp for faster VAD and ASR.
-    Retains the same ResponseStrategy and TTS pipeline.
+    Voice Assistant using pywhispercpp for ASR and local VAD (Sherpa-ONNX via vad.py).
     """
     
     def __init__(self, 
@@ -36,53 +37,143 @@ class VoiceAssistantFast:
         self.config = config
         self.tts = tts
         self.response_strategy = response_strategy
-        self.assistant = None
-        self.tts_queue = queue.Queue()
+        
+        # Audio Configuration
+        self.sample_rate = 16000
+        self.block_size = int(self.sample_rate * 0.03) # 30ms block
+        
+        # VAD
+        self.vad = VoiceActivityDetector(config)
+        self.audio_queue = queue.Queue()
+        
+        # ASR
+        # Using a default GGML model path or one from config if it existed.
+        # The user's previous code used various defaults. We'll stick to a reasonable default.
+        model_path = config.get("models", {}).get("whisper_cpp", "./models/ggml-base-hi.bin")
+        n_threads = config.get("asr", {}).get("num_threads", 4)
+        
+        print(f"Loading pywhispercpp model from {model_path}...")
+        self.asr_model = Model(model_path,
+                               n_threads=n_threads,
+                               print_realtime=False,
+                               print_progress=False,
+                               print_timestamps=False,
+                               single_segment=True,
+                               no_context=True)
+                               
         self.is_running = False
+
+    def _audio_callback(self, indata, frames, time, status):
+        """
+        Audio callback for sounddevice.
+        """
+        if status:
+            print(f"Audio status: {status}", file=sys.stderr)
         
-    def _command_callback(self, text: str):
-        """Callback for pywhispercpp Assistant when speech is transcribed."""
-        if not text.strip():
-            return
-            
-        print(f"\n[ASR] {text}")
+        # Add to queue for processing in the main loop/thread
+        # We make a copy to avoid buffer reuse issues
+        self.audio_queue.put(indata.copy())
+
+    def _process_audio(self):
+        """
+        Process audio from queue: VAD -> Accumulate -> Transcribe
+        """
+        print("Listening...")
         
+        while self.is_running:
+            try:
+                # Get audio chunk
+                # Using a timeout to allow checking self.is_running occasionally
+                indata = self.audio_queue.get(timeout=0.1)
+                
+                # Flatten and process for VAD
+                # vad.py accepts numpy array. Sherpa VAD expects flat array.
+                audio_data = indata.flatten()
+                
+                # Feed to VAD
+                self.vad.accept_waveform(audio_data)
+                
+                # Check for detected speech segments
+                while not self.vad.empty():
+                    segment = self.vad.get_speech_segment()
+                    if segment is not None and len(segment) > 0:
+                        self._transcribe_segment(segment)
+                        
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Error in audio processing: {e}")
+
+    def _transcribe_segment(self, audio_segment):
+        """
+        Transcribe a speech segment using pywhispercpp.
+        """
+        # pywhispercpp expects float array.
+        # Transcribe
+        try:
+            # We can pass the segment directly
+            self.asr_model.transcribe(audio_segment, new_segment_callback=self._on_transcription)
+        except Exception as e:
+            print(f"Transcription error: {e}")
+
+    def _on_transcription(self, seg):
+        """Callback for new transcription segments."""
+        text = seg.text.strip()
+        if text:
+            print(f"\n[ASR] {text}")
+            self._handle_command(text)
+
+    def _handle_command(self, text: str):
+        """Generate response and speak."""
         # Generate response
         response = self.response_strategy.generate_response(text)
         print(f"[Response] {response}")
         
-        # Synthesize and play (we can do this directly or via queue)
-        # Using queue to keep callback fast is better, but pywhispercpp might be running in a thread already.
-        # Let's try direct execution first, or use the existing TTS loop pattern if we want to be safe.
-        # Given pywhispercpp runs in its own loops, we should probably output audio in a way that doesn't block capture too much,
-        # but since we are replying, blocking capture is actually desired (to avoid hearing itself).
-        
-        # Synthesize
-        result = self.tts.synthesize(response)
-        if result:
-            audio, sample_rate = result
-            print(f"[TTS] Playing response...")
-            # Blocking playback to prevent the assistant from listening to itself
-            sd.play(audio, sample_rate)
-            sd.wait()
+        if response:
+            # TTS
+            # Note: This blocks the processing loop, which is actually good 
+            # because we don't want to listen to our own voice.
+            # However, sounddevice stream is still running in background and determining VAD.
+            # We might want to assume the user IS listening to the TTS and pause processing?
+            # But the VAD is robust enough usually.
+            
+            # Simple approach: Stop processing queue while speaking?
+            # Or just let it run. If we have echo cancellation it's fine. 
+            # Without it, we might trigger ourselves.
+            # Let's simple play.
+            
+            result = self.tts.synthesize(response)
+            if result:
+                audio, sample_rate = result
+                print(f"[TTS] Playing...")
+                sd.play(audio, sample_rate)
+                sd.wait()
+                # Clear queue after speaking to avoid processing eco
+                with self.audio_queue.mutex:
+                    self.audio_queue.queue.clear()
+                self.vad.flush()
 
     def run(self):
-        """Run the pywhispercpp assistant."""
-        print("Initializing pywhispercpp Assistant...")
+        """Start the assistant."""
+        self.is_running = True
         
+        # Start processing thread
+        process_thread = threading.Thread(target=self._process_audio)
+        process_thread.start()
         
-        self.assistant = Assistant(
-            commands_callback=self._command_callback,
-            n_threads=self.config.get("asr", {}).get("num_threads", 4),
-            model="./models/ggml-base-hi.bin", 
-            silence_threshold=16, # Default
-            block_duration=30     # Default
-        )
-        
-        print("\n" + "="*50)
-        print("Fast Voice Assistant Started (pywhispercpp)!")
-        print("Speak into your microphone...")
-        print("Press Ctrl+C to exit")
-        print("="*50 + "\n")
-        
-        self.assistant.start()
+        try:
+            # Start Audio Stream
+            with sd.InputStream(channels=1,
+                                samplerate=self.sample_rate,
+                                blocksize=self.block_size,
+                                callback=self._audio_callback):
+                print("Press Ctrl+C to stop...")
+                while self.is_running:
+                    time.sleep(0.1)
+                    
+        except KeyboardInterrupt:
+            print("Stopping...")
+        finally:
+            self.is_running = False
+            process_thread.join()
+            print("Stopped.")

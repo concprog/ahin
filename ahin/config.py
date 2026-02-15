@@ -10,12 +10,10 @@ DEFAULT_CONFIG = {
     # Model paths - adjust these to your actual model locations
     "models": {
         "vad": "./models/silero_vad.onnx",
-        # "whisper_encoder": "./models/sherpa-onnx-whisper-small/small-encoder.onnx",
-        # "whisper_decoder": "./models/sherpa-onnx-whisper-small/small-decoder.onnx",
-        # "whisper_tokens": "./models/sherpa-onnx-whisper-small/small-tokens.txt",
-        "whisper_encoder": "./models/sherpa-onnx-whisper-tiny/encoder_model_int8.onnx",
-        "whisper_decoder": "./models/sherpa-onnx-whisper-tiny/decoder_model_int8.onnx",
-        "whisper_tokens": "./models/sherpa-onnx-whisper-tiny/hindi-vocab-tokens.txt",
+        "whisper_encoder": "./models/sherpa-onnx-whisper-small/small-encoder.onnx",
+        "whisper_decoder": "./models/sherpa-onnx-whisper-small/small-decoder.onnx",
+        "whisper_tokens": "./models/sherpa-onnx-whisper-small/small-tokens.txt",
+        "whisper_cpp": "./models/ggml-base-hi.bin",
         "vits_model": "./models/vits-piper-hi_IN-rohan-medium/hi_IN-rohan-medium.onnx",
         "vits_tokens": "./models/vits-piper-hi_IN-rohan-medium/tokens.txt",
         "vits_data_dir": "./models/vits-piper-hi_IN-rohan-medium/espeak-ng-data",

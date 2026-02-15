@@ -3,9 +3,9 @@ import sys
 from typing import Dict, Any
 
 from ahin.config import DEFAULT_CONFIG, validate_config, merge_configs
-from ahin.voice_assistant import VoiceAssistant
-from ahin.vad import VoiceActivityDetector
-from ahin.asr import WhisperASR
+# from ahin.voice_assistant import VoiceAssistant # Deprecated/Unused
+# from ahin.vad import VoiceActivityDetector # Used internally by VoiceAssistantFast
+# from ahin.asr import WhisperASR # Deprecated/Unused
 from ahin.tts import PiperTTS
 
 
@@ -32,6 +32,14 @@ def create_custom_config() -> Dict[str, Any]:
         # "tts": {
         #     "speed": 1.2,
         # },
+        
+        # LLM Configuration
+        "llm": {
+            "base_url": "http://localhost:1234/v1", # Update port as needed
+            "api_key": "lm-studio", 
+            "model": "qwen2.5-7b-instruct-1m", # Example model
+            # System prompt is defined in the strategy but can be overridden here
+        }
     }
     return custom
 
@@ -56,15 +64,15 @@ def main():
     
     # Initialize components
     try:
-        vad = VoiceActivityDetector(config)
-        asr = WhisperASR(config)
         tts = PiperTTS(config)
+        
+        # Use LLM Strategy
         from ahin.strats.conversational import ConversationalStrategy
         response_strategy = ConversationalStrategy(config)
         
         from ahin.voice_assistant_fast import VoiceAssistantFast
         # Using VoiceAssistantFast as requested
-        # Note: VAD and ASR are handled internally by pywhispercpp
+        # Note: VAD (Sherpa-ONNX) and ASR (pywhispercpp) are handled internally
         assistant = VoiceAssistantFast(config, tts, response_strategy)
         assistant.run()
     except Exception as e:
