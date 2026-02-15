@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
         "whisper_encoder": "./models/sherpa-onnx-whisper-small/small-encoder.onnx",
         "whisper_decoder": "./models/sherpa-onnx-whisper-small/small-decoder.onnx",
         "whisper_tokens": "./models/sherpa-onnx-whisper-small/small-tokens.txt",
-        "whisper_cpp": "./models/whisper-tiny-vaani-ggml.bin",
+        "whisper_cpp": "./models/ggml-base-hi.bin",
         "vits_model": "./models/vits-piper-hi_IN-rohan-medium/hi_IN-rohan-medium.onnx",
         "vits_tokens": "./models/vits-piper-hi_IN-rohan-medium/tokens.txt",
         "vits_data_dir": "./models/vits-piper-hi_IN-rohan-medium/espeak-ng-data",

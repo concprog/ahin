@@ -67,7 +67,7 @@ def main():
         tts = PiperTTS(config)
         
         # Use LLM Strategy
-        from ahin.strats.conversational import ConversationalStrategy
+        from ahin.strats.default import ConversationalStrategy
         response_strategy = ConversationalStrategy(config)
         
         from ahin.voice_assistant_fast import VoiceAssistantFast

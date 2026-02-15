@@ -2,7 +2,7 @@
 from typing import Dict, Any
 from ahin.core import ResponseStrategyProtocol
 
-class ConversationsalStrategy:
+class ConversationalStrategy:
     """
     Default response strategy that echoes back the user's input.
     """
