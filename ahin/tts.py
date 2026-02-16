@@ -2,6 +2,7 @@
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
 import soundfile as sf
+import sys
 
 try:
     import sherpa_onnx
@@ -74,3 +75,112 @@ class PiperTTS:
                 print(f"Error saving TTS audio: {e}")
             
         return np.array(audio.samples, dtype=np.float32), audio.sample_rate
+
+
+Piper: Optional[Any] = None
+try:
+    from piper_onnx import Piper
+except ImportError:
+    print("For PiperOnnxTTS, please install piper-onnx: uv add piper-onnx")
+    # We do not exit here, as the user might not be using this class
+
+
+class PiperOnnxTTS:
+    """Wrapper for Piper TTS using piper-onnx (official python binding)."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the Piper TTS synthesizer from configuration.
+        
+        Args:
+            config: Configuration dictionary containing models and tts settings
+        """
+        models = config["models"]
+        
+        # Check if piper-onnx is installed
+        if 'piper_onnx' not in sys.modules and 'Piper' not in globals():
+             raise ImportError("piper-onnx is not installed. Please install it with: uv add piper-onnx")
+
+        # Load model and config
+        model_path = models["vits_model"]
+        config_path = models.get("vits_config")
+        
+        if not config_path:
+             # Try to infer config path if not provided
+             config_path = model_path + ".json"
+             
+        self.piper = Piper(model_path, config_path)
+        self.speed = 1.0 # Piper-onnx does not seem to support speed adjustment in create() directly in the provided snippet
+        # If the user wants speed adjustment, it might need post-processing or checking piper-onnx docs.
+        # However, the user request snippet didn't show speed adjustment.
+        
+    def synthesize(self, text: str, output_path: Optional[str] = None) -> Optional[Tuple[np.ndarray, int]]:
+        """
+        Synthesize speech from text.
+        
+        Args:
+            text: Text to synthesize
+            output_path: Optional path to save the audio file
+            
+        Returns:
+            Tuple of (audio_samples, sample_rate) or None if synthesis failed
+        """
+        # The user example: samples, sample_rate = piper.create('Hello world from Piper!', speaker_id=voices['awb'])
+        # But we might not need speaker_id if it's a single speaker model.
+        # Let's check voices first.
+        # voices = self.piper.get_voices()
+        # If voices is empty or None, maybe we don't pass speaker_id.
+        # The example used speaker_id=voices['awb'].
+        
+        # For single speaker models, speaker_id might be Optional.
+        # Let's try to call it without speaker_id first, or check if we need it.
+        # Actually, the user snippet showed:
+        # voices = piper.get_voices()
+        # samples, sample_rate = piper.create('Hello world from Piper!', speaker_id=voices['awb'])
+        
+        # I'll implement a safe way to get speaker_id.
+        speaker_id: Optional[int] = None
+        voices = self.piper.get_voices()
+        if voices:
+            # creating a default speaker id if available.
+            # config.json usually has speaker_id_map.
+            # converting to list and taking first one if detailed map.
+            # But the 'voices' return from piper-onnx seems to be a dict or list.
+            # In the user snippet: `speaker_id=voices['awb']`.
+            # So voices is a dict.
+            # I will just pick the first one if available.
+            try:
+                 first_voice_key = next(iter(voices))
+                 speaker_id = voices[first_voice_key]
+            except StopIteration:
+                 pass
+        
+        text = text.strip().replace("\n", " ")
+        if not text:
+            return None
+
+        # Piper onnx create returns (samples, sample_rate)
+        
+        # We need to satisfy the linter for speaker_id which expects int or str usually, but python binding might accept None?
+        # If speaker_id is None, let's assume the library handles it or we should pass 0?
+        # For now we cast to Any to avoid lint error if we are sure it works or just leave it.
+        # But wait, looking at the snippet `create('Hello world from Piper!', speaker_id=voices['awb'])`
+        
+        if speaker_id is None:
+             samples, sample_rate = self.piper.create(text)
+        else:
+             samples, sample_rate = self.piper.create(text, speaker_id=speaker_id)
+        
+        # Convert to float32 for compatibility with sounddevice if it's int16
+        if samples.dtype == np.int16:
+            samples = samples.astype(np.float32) / 32768.0
+
+        if output_path:
+            try:
+                # Save using soundfile
+                sf.write(output_path, samples, samplerate=sample_rate)
+                print(f"Saved Piper-ONNX audio to {output_path}")
+            except Exception as e:
+                print(f"Error saving TTS audio: {e}")
+                
+        return samples, sample_rate

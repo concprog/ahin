@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
         "whisper_tokens": "./models/sherpa-onnx-whisper-small/small-tokens.txt",
         "whisper_cpp": "./models/ggml-base-hi.bin",
         "vits_model": "./models/vits-piper-hi_IN-rohan-medium/hi_IN-rohan-medium.onnx",
+        "vits_config": "./models/vits-piper-hi_IN-rohan-medium/hi_IN-rohan-medium.onnx.json",
         "vits_tokens": "./models/vits-piper-hi_IN-rohan-medium/tokens.txt",
         "vits_data_dir": "./models/vits-piper-hi_IN-rohan-medium/espeak-ng-data",
     },
@@ -48,7 +49,7 @@ DEFAULT_CONFIG = {
     
     # Audio I/O configuration
     "audio": {
-        "sample_rate": 24000,
+        "sample_rate": 48000,
         "chunk_duration": 0.1,  # 100ms chunks
         "channels": 1,
     },
@@ -68,6 +69,7 @@ def validate_config(config: Dict[str, Any]) -> bool:
         (config["models"]["whisper_decoder"], "Whisper decoder"),
         (config["models"]["whisper_tokens"], "Whisper tokens"),
         (config["models"]["vits_model"], "VITS model"),
+        (config["models"]["vits_config"], "VITS config"),
         (config["models"]["vits_tokens"], "VITS tokens"),
     ]
     

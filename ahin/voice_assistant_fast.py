@@ -62,6 +62,7 @@ class VoiceAssistantFast:
         # Multiprocessing queues (thread-safe and process-safe)
         self.audio_queue = Queue(maxsize=100)  # Limit queue size to prevent memory bloat
         self.result_queue = Queue()
+        self.tts_playing = mp.Event()
         
         # Keep all original config intact for passing to worker
         self.worker_config = {
@@ -90,7 +91,7 @@ class VoiceAssistantFast:
             pass
 
     @staticmethod
-    def _asr_worker(audio_queue: Queue, result_queue: Queue, worker_config: dict):
+    def _asr_worker(audio_queue: Queue, result_queue: Queue, worker_config: dict, tts_playing: Any):
         """
         Separate process for CPU-intensive ASR work.
         This achieves true parallelism by bypassing GIL.
@@ -147,6 +148,10 @@ class VoiceAssistantFast:
                 
                 if indata is None:  # Poison pill to stop
                     break
+                
+                # Check if TTS is playing - skip processing
+                if tts_playing.is_set():
+                    continue
                 
                 # Flatten
                 audio_data = indata.flatten()
@@ -213,7 +218,10 @@ class VoiceAssistantFast:
                 print(f"[TTS] Playing...")
                 
                 # Pause audio processing during TTS to avoid echo
-                # Drain the audio queue
+                # We use the event flag to tell the worker to drop audio
+                self.tts_playing.set()
+                
+                # Drain the audio queue to clear old buffered audio
                 try:
                     while True:
                         self.audio_queue.get_nowait()
@@ -222,6 +230,10 @@ class VoiceAssistantFast:
                 
                 sd.play(audio, sample_rate)
                 sd.wait()
+                
+                # Small buffer to ensure we don't catch the tail or echo
+                time.sleep(0.2)
+                self.tts_playing.clear()
 
     def run(self):
         """Start the assistant."""
@@ -230,7 +242,7 @@ class VoiceAssistantFast:
         # Start ASR worker process (true parallelism)
         self.asr_process = Process(
             target=self._asr_worker,
-            args=(self.audio_queue, self.result_queue, self.worker_config)
+            args=(self.audio_queue, self.result_queue, self.worker_config, self.tts_playing)
         )
         self.asr_process.start()
         

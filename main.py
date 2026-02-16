@@ -9,7 +9,8 @@ load_dotenv()
 # from ahin.voice_assistant import VoiceAssistant # Deprecated/Unused
 # from ahin.vad import VoiceActivityDetector # Used internally by VoiceAssistantFast
 # from ahin.asr import WhisperASR # Deprecated/Unused
-from ahin.tts import PiperTTS
+# from ahin.tts import PiperTTS
+from ahin.tts import PiperOnnxTTS
 
 
 
@@ -66,7 +67,8 @@ def main():
     
     # Initialize components
     try:
-        tts = PiperTTS(config)
+        # tts = PiperTTS(config)
+        tts = PiperOnnxTTS(config)
         
         # Use LLM Strategy
         from ahin.strats.llm import ConversationalStrategy
