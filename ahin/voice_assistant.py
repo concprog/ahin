@@ -30,6 +30,7 @@ import sys
 import time
 import queue
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 
@@ -138,7 +139,12 @@ class VoiceAssistant:
                 text = self.tts_queue.get(timeout=0.1)
                 
                 # Synthesize and play
-                result = self.tts.synthesize(text)
+                output_path = None
+                if self.config["tts"].get("output_to_file", False):
+                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                    output_path = str(Path.cwd() / f"{timestamp}.mp3")
+                
+                result = self.tts.synthesize(text, output_path=output_path)
                 if result:
                     audio, sample_rate = result
                     print(f"[TTS] Playing response...")

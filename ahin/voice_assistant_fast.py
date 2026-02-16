@@ -5,6 +5,8 @@ import multiprocessing as mp
 from multiprocessing import Process, Queue
 import logging
 from typing import Dict, Any, Optional
+from datetime import datetime
+from pathlib import Path
 import numpy as np
 
 try:
@@ -200,7 +202,12 @@ class VoiceAssistantFast:
         
         if response:
             # TTS
-            result = self.tts.synthesize(response)
+            output_path = None
+            if self.config["tts"].get("output_to_file", False):
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                output_path = str(Path.cwd() / f"{timestamp}.mp3")
+
+            result = self.tts.synthesize(response, output_path=output_path)
             if result:
                 audio, sample_rate = result
                 print(f"[TTS] Playing...")

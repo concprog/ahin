@@ -43,6 +43,7 @@ DEFAULT_CONFIG = {
         "speed": 1.1,
         "debug": False,
         "sample_rate": 22050,
+        "output_to_file": False,
     },
     
     # Audio I/O configuration
