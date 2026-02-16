@@ -3,6 +3,9 @@ import sys
 from typing import Dict, Any
 
 from ahin.config import DEFAULT_CONFIG, validate_config, merge_configs
+from dotenv import load_dotenv
+
+load_dotenv()
 # from ahin.voice_assistant import VoiceAssistant # Deprecated/Unused
 # from ahin.vad import VoiceActivityDetector # Used internally by VoiceAssistantFast
 # from ahin.asr import WhisperASR # Deprecated/Unused
@@ -29,16 +32,15 @@ def create_custom_config() -> Dict[str, Any]:
         },
         
         # Example: Speed up speech
-        # "tts": {
-        #     "speed": 1.2,
-        # },
+        "tts": {
+            "speed": 1.25,
+        },
         
         # LLM Configuration
         "llm": {
-            "base_url": "http://localhost:1234/v1", # Update port as needed
-            "api_key": "lm-studio", 
-            "model": "qwen2.5-7b-instruct-1m", # Example model
-            # System prompt is defined in the strategy but can be overridden here
+            "base_url": "https://integrate.api.nvidia.com/v1",
+            "model": "nvidia/nemotron-4-mini-hindi-4b-instruct",
+            # API Key is loaded from environment variable NVIDIA_API_KEY
         }
     }
     return custom
@@ -67,7 +69,7 @@ def main():
         tts = PiperTTS(config)
         
         # Use LLM Strategy
-        from ahin.strats.default import ConversationalStrategy
+        from ahin.strats.llm import ConversationalStrategy
         response_strategy = ConversationalStrategy(config)
         
         from ahin.voice_assistant_fast import VoiceAssistantFast

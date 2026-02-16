@@ -112,7 +112,10 @@ class VoiceAssistantFast:
                      print_progress=False,
                      print_timestamps=False,
                      single_segment=True,
-                     no_context=True)
+                     no_context=True,
+                     audio_ctx=512,
+                     language=config.get("asr", {}).get("language", "hi")
+                     )
         
         # Initialize VAD in worker process
         from .vad import VoiceActivityDetector
