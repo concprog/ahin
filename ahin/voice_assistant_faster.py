@@ -2,7 +2,6 @@ import sys
 import queue
 import time
 import multiprocessing as mp
-from multiprocessing import Process, Queue
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -250,7 +249,7 @@ class VoiceAssistantFaster:
         self.is_running = True
         
         # Start ASR worker process
-        self.asr_process = Process(
+        self.asr_process = mp.Process(
             target=self._asr_worker,
             args=(self.audio_queue, self.result_queue, self.worker_config, self.tts_playing)
         )

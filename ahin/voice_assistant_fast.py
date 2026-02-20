@@ -2,7 +2,6 @@ import sys
 import queue
 import time
 import multiprocessing as mp
-from multiprocessing import Process, Queue
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -179,6 +178,7 @@ class VoiceAssistantFast:
                 # Check for detected speech segments
                 processed_count = 0
                 while not vad.empty() and processed_count < 2:
+                    segment_start = time.perf_counter()
                     segment = vad.get_speech_segment()
                     segment_time = time.perf_counter() - segment_start
                     
@@ -262,7 +262,7 @@ class VoiceAssistantFast:
         self.is_running = True
         
         # Start ASR worker process (true parallelism)
-        self.asr_process = Process(
+        self.asr_process = mp.Process(
             target=self._asr_worker,
             args=(self.audio_queue, self.result_queue, self.worker_config, self.tts_playing)
         )
