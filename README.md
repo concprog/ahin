@@ -39,13 +39,7 @@ uv run download_models.py
 
 This will create a `models/` directory and download approximately 500MB+ of model files.
 
-### 3. Configure Environment
 
-If you are using the default LLM strategy (NVIDIA Nemotron), you'll need an API key. Create a `.env` file in the root directory:
-
-```bash
-echo "NVIDIA_API_KEY=your_api_key_here" > .env
-```
 
 ## Running the Assistant
 
@@ -62,6 +56,8 @@ uv run main.py
 - `ahin/`: Core logic for VAD, ASR, TTS, and assistant orchestration.
 - `ahin/strats/`: Response generation strategies (conversational, semantic, etc.).
 - [ARM Optimization & Hardware Tuning](ARMOPT.md): Technical details on optimizing for Raspberry Pi 4, overclocking, and performance comparisons.
+- [Usage and Configuration](USAGE.md): Detailed documentation on project files and configuration settings.
+- [Credits and Acknowledgments](CREDITS.md): Attribution for libraries and models used in the project.
 
 ## System Architecture
 
