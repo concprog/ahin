@@ -7,7 +7,7 @@ from ahin.voice_assistant import VoiceAssistant
 from ahin.vad import VoiceActivityDetector
 from ahin.asr import WhisperASR
 from ahin.tts import PiperTTS
-from ahin.strats.conversational import ConversationalStrategy
+from ahin.strats.command import ConversationalStrategy
 
 
 def create_custom_config() -> Dict[str, Any]:

@@ -12,7 +12,7 @@ load_dotenv()
 # from ahin.asr import WhisperASR # Deprecated/Unused
 # from ahin.tts import PiperTTS
 from ahin.tts import PiperOnnxTTS
-
+from ahin.voice_assistant_fast import VoiceAssistantFast
 
 
 def create_custom_config() -> Dict[str, Any]:
@@ -41,7 +41,7 @@ def create_custom_config() -> Dict[str, Any]:
         # LLM Configuration
         "llm": {
             "base_url": "https://integrate.api.nvidia.com/v1",
-            "model": "nvidia/nemotron-4-mini-hindi-4b-instruct",
+            "model": "mistralai/ministral-14b-instruct-2512",
             # API Key is loaded from environment variable NVIDIA_API_KEY
         }
     }

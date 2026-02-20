@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         "buffer_size_seconds": 20,
         "min_silence_duration": 0.5,
         "min_speech_duration": 0.1,
-        "threshold": 0.6,
+        "threshold": 0.4,
     },
     
     # ASR configuration

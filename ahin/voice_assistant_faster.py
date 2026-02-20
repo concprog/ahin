@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
 import numpy as np
+import os
 
 try:
     import sounddevice as sd
@@ -19,15 +20,19 @@ try:
 except ImportError:
     raise ImportError("Please install soxr: uv add soxr")
 
-from pywhispercpp.model import Model
+try:
+    from faster_whisper import WhisperModel
+except ImportError:
+    raise ImportError("Please install faster-whisper")
+
 from .vad import VoiceActivityDetector
 from .core import PiperTTSProtocol, ResponseStrategyProtocol
 
-class VoiceAssistantFast:
+class VoiceAssistantFaster:
     """
-    Voice Assistant using multiprocessing for CPU-intensive ASR processing.
+    Voice Assistant using multiprocessing for intensive ASR processing.
     Audio callback runs in separate thread (efficient for I/O).
-    VAD + ASR runs in separate process (true parallelism).
+    VAD + ASR runs in separate process. Uses faster-whisper instead of pywhispercpp.
     """
     
     def __init__(self, 
@@ -42,12 +47,11 @@ class VoiceAssistantFast:
             tts: Initialized TTS instance
             response_strategy: Strategy to generate responses
         """
-        print("<-- PYWHISPERCPP + SHERPA-ONNX Voice Assistant -->")
         self.config = config
         self.tts = tts
         self.response_strategy = response_strategy
         
-        # Audio Configuration - kept from original
+        # Audio Configuration
         self.sample_rate = config["audio"].get("sample_rate", 16000)
         self.asr_sample_rate = 16000  # ASR always requires 16kHz
         self.block_size = int(self.sample_rate * 0.03)  # 30ms block
@@ -65,7 +69,7 @@ class VoiceAssistantFast:
         
         # Keep all original config intact for passing to worker
         self.worker_config = {
-            'config': config,  # Pass entire config to worker
+            'config': config,
             'needs_resampling': self.needs_resampling,
             'input_sample_rate': self.sample_rate,
             'asr_sample_rate': self.asr_sample_rate
@@ -74,7 +78,7 @@ class VoiceAssistantFast:
         self.is_running = False
         self.asr_process = None
 
-    def _audio_callback(self, indata, frames, time, status):
+    def _audio_callback(self, indata, frames, time_info, status):
         """
         Audio callback for sounddevice - runs in audio thread.
         This is I/O bound, so threading is efficient here.
@@ -92,8 +96,7 @@ class VoiceAssistantFast:
     @staticmethod
     def _asr_worker(audio_queue: mp.Queue, result_queue: mp.Queue, worker_config: dict, tts_playing: Any):
         """
-        Separate process for CPU-intensive ASR work.
-        This achieves true parallelism by bypassing GIL.
+        Separate process for CPU/GPU-intensive ASR work.
         """
         print(f"ASR worker started (PID: {mp.current_process().pid})")
         
@@ -103,22 +106,30 @@ class VoiceAssistantFast:
         input_sample_rate = worker_config['input_sample_rate']
         asr_sample_rate = worker_config['asr_sample_rate']
         
-        # Initialize ASR - using original config logic
-        model_path = config.get("models", {}).get("whisper_cpp", "./models/ggml-base-hi.bin")
+        # Initialize ASR
+        # We assume config["models"]["faster_whisper"] points to a model id or path, or default to base
+        model_size_or_path = config.get("models", {}).get("faster_whisper", "small")
         n_threads = config.get("asr", {}).get("num_threads", 4)
+        language = config.get("asr", {}).get("language", "hi")
         
-        print(f"Loading pywhispercpp model from {model_path}...")
-        model = Model(model_path,
-                     n_threads=n_threads,
-                     print_realtime=False,
-                     print_progress=False,
-                     print_timestamps=False,
-                     single_segment=True,
-                     no_context=True,
-                     audio_ctx=512,
-                     language=config.get("asr", {}).get("language", "hi")
-                     )
+        device = "cpu"
+        compute_type = "int8"
+            
+        print(f"Loading faster-whisper model '{model_size_or_path}' on {device} ({compute_type})...")
+        print(f"Using {n_threads} CPU threads for model ops")
         
+        try:
+            model = WhisperModel(
+                model_size_or_path,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=n_threads,
+            )
+        except Exception as e:
+            print(f"Failed to load faster-whisper model: {e}")
+            result_queue.put(('error', str(e)))
+            return
+            
         # Initialize VAD in worker process
         from .vad import VoiceActivityDetector
         vad = VoiceActivityDetector(config)
@@ -131,19 +142,13 @@ class VoiceAssistantFast:
                 asr_sample_rate,
                 1,  # mono channel
                 dtype='float32',
-                quality='MQ'  # High quality - fast enough for real-time
+                quality='MQ'
             )
-        
-        def transcribe_callback(seg):
-            """Callback for transcription results."""
-            text = seg.text.strip()
-            if text:
-                result_queue.put(('transcription', text))
         
         try:
             while True:
                 try:
-                    # Get audio chunk (wait up to 1 second before looping)
+                    # Get audio chunk
                     indata = audio_queue.get(timeout=1.0)
                 except queue.Empty:
                     continue
@@ -158,37 +163,30 @@ class VoiceAssistantFast:
                 # Flatten
                 audio_data = indata.flatten()
                 
-                # Resample if needed (input_rate -> 16kHz)
+                # Resample if needed
                 if resampler is not None:
-                    resample_start = time.perf_counter()
                     audio_data = resampler.resample_chunk(audio_data, last=False)
-                    resample_time = time.perf_counter() - resample_start
-                    # Only print occasionally to avoid spam (every 100 chunks)
-                    if hasattr(resampler, '_debug_count'):
-                        resampler._debug_count += 1
-                    else:
-                        resampler._debug_count = 1
-                    if resampler._debug_count % 100 == 0:
-                        print(f"⏱️  [Worker] Resample: {resample_time*1000:.2f}ms")
                 
-                # Feed to VAD (now at 16kHz if resampled)
-                vad_start = time.perf_counter()
+                # Feed to VAD
                 vad.accept_waveform(audio_data)
-                vad_time = time.perf_counter() - vad_start
                 
                 # Check for detected speech segments
                 processed_count = 0
                 while not vad.empty() and processed_count < 2:
                     segment = vad.get_speech_segment()
-                    segment_time = time.perf_counter() - segment_start
-                    
                     if segment is not None and len(segment) > 0:
-                        segment_duration = len(segment) / asr_sample_rate
-                        print(f"⏱️  [Worker] VAD detected speech: {segment_duration:.2f}s segment, extraction: {segment_time*1000:.1f}ms")
+                        # Transcribe the segment using faster-whisper
+                        segments, info = model.transcribe(
+                            segment,
+                            language=language,
+                            beam_size=5,
+                            vad_filter=False,  # We already did VAD externally
+                            without_timestamps=True
+                        )
                         
-                        # Transcribe (CPU-intensive) - audio segment is already at 16kHz
-                        asr_start = time.perf_counter()
-                        model.transcribe(segment, new_segment_callback=transcribe_callback)
+                        text = "".join([s.text for s in segments]).strip()
+                        if text:
+                            result_queue.put(('transcription', text))
                     processed_count += 1
                         
         except Exception as e:
@@ -219,15 +217,9 @@ class VoiceAssistantFast:
 
     def _handle_command(self, text: str):
         """Generate response and speak."""
-        total_start = time.perf_counter()
-        
         # Generate response
-        response_start = time.perf_counter()
-        matched, response = self.response_strategy.generate_response(text)
-        response_time = time.perf_counter() - response_start
-        
+        response = self.response_strategy.generate_response(text)
         print(f"[Response] {response}")
-        print(f"⏱️  Response generation: {response_time*1000:.1f}ms (matched: {matched})")
         
         if response:
             # TTS
@@ -236,11 +228,7 @@ class VoiceAssistantFast:
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 output_path = str(Path.cwd() / f"{timestamp}.mp3")
 
-            tts_start = time.perf_counter()
             result = self.tts.synthesize(response, output_path=output_path)
-            tts_time = time.perf_counter() - tts_start
-            print(f"⏱️  TTS synthesis: {tts_time*1000:.1f}ms")
-            
             if result:
                 audio, sample_rate = result
                 print(f"[TTS] Playing...")
@@ -261,20 +249,20 @@ class VoiceAssistantFast:
         """Start the assistant."""
         self.is_running = True
         
-        # Start ASR worker process (true parallelism)
+        # Start ASR worker process
         self.asr_process = Process(
             target=self._asr_worker,
             args=(self.audio_queue, self.result_queue, self.worker_config, self.tts_playing)
         )
         self.asr_process.start()
         
-        # Result handler runs in main process (using threading for I/O)
+        # Result handler runs in main process
         import threading
         result_thread = threading.Thread(target=self._handle_results)
         result_thread.start()
         
         try:
-            # Start Audio Stream at input sample rate (callback runs in audio thread)
+            # Start Audio Stream
             with sd.InputStream(channels=1,
                                 samplerate=self.sample_rate,
                                 blocksize=self.block_size,
@@ -302,7 +290,5 @@ class VoiceAssistantFast:
             result_thread.join(timeout=2)
             print("Stopped.")
 
-
 if __name__ == '__main__':
-    # Required for multiprocessing on Windows/macOS
     mp.set_start_method('spawn', force=True)
