@@ -217,10 +217,10 @@ class VoiceAssistantFaster:
     def _handle_command(self, text: str):
         """Generate response and speak."""
         # Generate response
-        response = self.response_strategy.generate_response(text)
+        response, _ = self.response_strategy.generate_response(text)
         print(f"[Response] {response}")
         
-        if response:
+        if _:
             # TTS
             output_path = None
             if self.config["tts"].get("output_to_file", False):

@@ -83,7 +83,7 @@ def main():
         # Initialize Response Strategy
         strategy_start = time.perf_counter()
         # Use LLM Strategy
-        from ahin.strats.llm import ConversationalStrategy
+        from ahin.strats.conversation_b import ConversationalStrategy
         response_strategy = ConversationalStrategy(config)
         strategy_time = time.perf_counter() - strategy_start
         print(f"⏱️  Strategy initialization: {strategy_time*1000:.1f}ms")

@@ -42,7 +42,7 @@ class ConversationalStrategy:
         default_system_prompt = (
             "You are Ahin, a smart and helpful voice assistant who speaks in Hindi. "
             "You use tools to fetch real-world data to answer user questions. "
-            "If a tool gives you English data, translate and summarize it in conversational Hindi, keep it short - six to seven words and max two sentences. NO MARKDOWN or formatting, simple hindi sentences"
+            "If a tool gives you English data, translate and summarize it in conversational Hindi, keep it short - six to seven words and max one sentences. NO MARKDOWN or formatting, simple hindi sentences"
             " Correct the user's input if it is misspelled or grammatically incorrect Hindi, if that is not poossible, infer the meaning and respond accordingly."
         )+"""
         एक धुआंधार, मजाकिया और मददगार हिंदी वॉइस असिस्टेंट।
@@ -214,13 +214,13 @@ class ConversationalStrategy:
                 
                 full_response = second_response.choices[0].message.content
                 
-                return full_response
+                return True, full_response
             else:
                 # No tool called, just return the standard text response
                 content = response_message.content or "माफ़ कीजिये, मैं जवाब नहीं दे पा रहा हूँ।"
                 print(content)
-                return content.strip()
+                return True, content.strip()
             
         except Exception as e:
             print(f"LLM Error: {e}")
-            return "माफ़ कीजिये, अभी मैं जवाब नहीं दे पा रहा हूँ।"
+            return False, "माफ़ कीजिये, अभी मैं जवाब नहीं दे पा रहा हूँ।"
