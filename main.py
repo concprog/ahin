@@ -41,7 +41,7 @@ def create_custom_config() -> Dict[str, Any]:
         # LLM Configuration
         "llm": {
             "base_url": "https://integrate.api.nvidia.com/v1",
-            "model": "mistralai/ministral-14b-instruct-2512",
+            "model": "nvidia/nemotron-3-nano-30b-a3b",
             # API Key is loaded from environment variable NVIDIA_API_KEY
         }
     }
@@ -83,7 +83,7 @@ def main():
         # Initialize Response Strategy
         strategy_start = time.perf_counter()
         # Use LLM Strategy
-        from ahin.strats.conversation_b import ConversationalStrategy
+        from ahin.strats.llm import ConversationalStrategy
         response_strategy = ConversationalStrategy(config)
         strategy_time = time.perf_counter() - strategy_start
         print(f"⏱️  Strategy initialization: {strategy_time*1000:.1f}ms")

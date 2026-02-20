@@ -23,10 +23,10 @@ DEFAULT_CONFIG = {
     # VAD configuration
     "vad": {
         "sample_rate": 16000,
-        "buffer_size_seconds": 20,
+        "buffer_size_seconds": 12,
         "min_silence_duration": 0.5,
-        "min_speech_duration": 0.1,
-        "threshold": 0.4,
+        "min_speech_duration": 0.15,
+        "threshold": 0.45,
     },
     
     # ASR configuration

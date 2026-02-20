@@ -12,6 +12,9 @@ from ahin.core import ResponseStrategyProtocol
 import urllib.request
 import json
 from datetime import datetime
+import re
+import platform
+import subprocess
 
 class ConversationalStrategy:
     """
@@ -42,8 +45,8 @@ class ConversationalStrategy:
         default_system_prompt = (
             "You are Ahin, a smart and helpful voice assistant who speaks in Hindi. "
             "You use tools to fetch real-world data to answer user questions. "
-            "If a tool gives you English data, translate and summarize it in conversational Hindi, keep it short - six to seven words and max one sentences. NO MARKDOWN or formatting, simple hindi sentences"
-            " Correct the user's input if it is misspelled or grammatically incorrect Hindi, if that is not poossible, infer the meaning and respond accordingly."
+            "If a tool gives you English data, translate and summarize it in conversational Hindi, keep it short - main answer in first six to seven words of first sentence. NO MARKDOWN or formatting, simple hindi sentences"
+            " Correct the user's input if it is misspelled or grammatically incorrect Hindi, if that is not possible, infer the meaning and respond accordingly."
         )+"""
         एक धुआंधार, मजाकिया और मददगार हिंदी वॉइस असिस्टेंट।
 
@@ -103,6 +106,28 @@ class ConversationalStrategy:
             "get_nationalize": self.get_nationalize,
             "get_number_fact": self.get_number_fact
         }
+        
+        self.tools.extend([
+            {"type": "function", "function": {"name": "get_day", "description": "Get the current day of the week."}},
+            {"type": "function", "function": {"name": "set_timer", "description": "Set a timer or an alarm."}},
+            {"type": "function", "function": {"name": "get_battery", "description": "Get the laptop or device battery status."}},
+            {"type": "function", "function": {"name": "volume_up", "description": "Increase system audio volume."}},
+            {"type": "function", "function": {"name": "volume_down", "description": "Decrease system audio volume."}},
+            {"type": "function", "function": {"name": "mute", "description": "Mute the system audio."}},
+            {"type": "function", "function": {"name": "take_screenshot", "description": "Take a screenshot of the user's screen."}},
+            {"type": "function", "function": {"name": "lock_screen", "description": "Lock the user's computer screen."}},
+        ])
+        
+        self.available_functions.update({
+            "get_day": self.get_day,
+            "set_timer": self.set_timer,
+            "get_battery": self.get_battery,
+            "volume_up": self.volume_up,
+            "volume_down": self.volume_down,
+            "mute": self.mute,
+            "take_screenshot": self.take_screenshot,
+            "lock_screen": self.lock_screen,
+        })
 
     def _fetch_json(self, url: str) -> str:
         try:
@@ -156,6 +181,135 @@ class ConversationalStrategy:
 
     def get_number_fact(self) -> str:
         return self._fetch_json("http://numbersapi.com/random/trivia?json")
+
+    def get_day(self) -> str:
+        days = ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार"]
+        return f"आज {days[datetime.now().weekday()]} है।"
+
+    def set_timer(self) -> str:
+        return "TIMER:60:ठीक है, एक मिनट का टाइमर लगा दिया।"
+
+    def get_battery(self) -> str:
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            if battery is None:
+                return "इस डिवाइस में बैटरी नहीं मिली।"
+            status = "चार्ज हो रही है" if battery.power_plugged else "चार्ज नहीं हो रही"
+            return f"बैटरी {int(battery.percent)} प्रतिशत है, {status}।"
+        except ImportError:
+            return "बैटरी जानकारी के लिए psutil इंस्टॉल करें।"
+
+    def volume_up(self) -> str:
+        system = platform.system()
+        try:
+            if system == "Linux":
+                subprocess.run(["amixer", "-q", "sset", "Master", "10%+"], check=True)
+            elif system == "Darwin":
+                subprocess.run(["osascript", "-e", "set volume output volume (output volume of (get volume settings) + 10)"], check=True)
+            elif system == "Windows":
+                from ctypes import cast, POINTER
+                from comtypes import CLSCTX_ALL
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                devices = AudioUtilities.GetSpeakers()
+                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                volume = cast(interface, POINTER(IAudioEndpointVolume))
+                current = volume.GetMasterVolumeLevelScalar()
+                volume.SetMasterVolumeLevelScalar(min(1.0, current + 0.1), None)
+            return "आवाज़ बढ़ा दी गई।"
+        except Exception as e:
+            return f"आवाज़ बढ़ाने में समस्या हुई: {e}"
+
+    def volume_down(self) -> str:
+        system = platform.system()
+        try:
+            if system == "Linux":
+                subprocess.run(["amixer", "-q", "sset", "Master", "10%-"], check=True)
+            elif system == "Darwin":
+                subprocess.run(["osascript", "-e", "set volume output volume (output volume of (get volume settings) - 10)"], check=True)
+            elif system == "Windows":
+                from ctypes import cast, POINTER
+                from comtypes import CLSCTX_ALL
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                devices = AudioUtilities.GetSpeakers()
+                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                volume = cast(interface, POINTER(IAudioEndpointVolume))
+                current = volume.GetMasterVolumeLevelScalar()
+                volume.SetMasterVolumeLevelScalar(max(0.0, current - 0.1), None)
+            return "आवाज़ कम कर दी गई।"
+        except Exception as e:
+            return f"आवाज़ कम करने में समस्या हुई: {e}"
+
+    def mute(self) -> str:
+        system = platform.system()
+        try:
+            if system == "Linux":
+                subprocess.run(["amixer", "-q", "sset", "Master", "toggle"], check=True)
+            elif system == "Darwin":
+                subprocess.run(["osascript", "-e", "set volume with output muted"], check=True)
+            elif system == "Windows":
+                from ctypes import cast, POINTER
+                from comtypes import CLSCTX_ALL
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                devices = AudioUtilities.GetSpeakers()
+                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                volume = cast(interface, POINTER(IAudioEndpointVolume))
+                volume.SetMute(1, None)
+            return "आवाज़ म्यूट कर दी गई।"
+        except Exception as e:
+            return f"म्यूट करने में समस्या हुई: {e}"
+
+    def take_screenshot(self) -> str:
+        system = platform.system()
+        path = os.path.expanduser(f"~/screenshot_{datetime.now():%Y%m%d_%H%M%S}.png")
+        try:
+            if system == "Linux":
+                subprocess.run(["scrot", path], check=True)
+            elif system == "Darwin":
+                subprocess.run(["screencapture", "-x", path], check=True)
+            elif system == "Windows":
+                subprocess.run(
+                    ["powershell", "-command",
+                     f"Add-Type -AssemblyName System.Windows.Forms; "
+                     f"[System.Windows.Forms.Screen]::PrimaryScreen | ForEach-Object {{ "
+                     f"$bmp = New-Object System.Drawing.Bitmap($_.Bounds.Width,$_.Bounds.Height); "
+                     f"$g = [System.Drawing.Graphics]::FromImage($bmp); "
+                     f"$g.CopyFromScreen($_.Bounds.Location,[System.Drawing.Point]::Empty,$_.Bounds.Size); "
+                     f"$bmp.Save('{path}') }}"],
+                    check=True
+                )
+            return f"स्क्रीनशॉट ले लिया गया और {path} पर सेव हो गया।"
+        except Exception as e:
+            return f"स्क्रीनशॉट लेने में समस्या हुई: {e}"
+
+    def lock_screen(self) -> str:
+        system = platform.system()
+        try:
+            if system == "Linux":
+                subprocess.run(["loginctl", "lock-session"], check=True)
+            elif system == "Darwin":
+                subprocess.run([
+                    "osascript", "-e",
+                    'tell application "System Events" to keystroke "q" '
+                    'using {command down, control down}'
+                ], check=True)
+            elif system == "Windows":
+                subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"], check=True)
+            return "स्क्रीन लॉक कर दी गई।"
+        except Exception as e:
+            return f"स्क्रीन लॉक करने में समस्या हुई: {e}"
+
+    def _clean_response(self, text: str) -> str:
+        if not text:
+            return ""
+        # Remove asterisks
+        text = text.replace('*', '')
+        # Remove emojis and some symbols
+        text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
+        text = re.sub(r'[\u2600-\u27BF]', '', text)
+        # Remove extra spaces
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
 
     def generate_response(self, text: str) -> Tuple[bool, str]:
         """
@@ -212,14 +366,15 @@ class ConversationalStrategy:
                     max_tokens=1024,
                 )
                 
-                full_response = second_response.choices[0].message.content
+                full_response = second_response.choices[0].message.content or ""
                 
-                return True, full_response
+                return True, self._clean_response(full_response)
             else:
                 # No tool called, just return the standard text response
                 content = response_message.content or "माफ़ कीजिये, मैं जवाब नहीं दे पा रहा हूँ।"
-                print(content)
-                return True, content.strip()
+                clean_content = self._clean_response(content)
+                print(clean_content)
+                return True, clean_content
             
         except Exception as e:
             print(f"LLM Error: {e}")
