@@ -52,18 +52,9 @@ gpu_freq=750
 
 ## GPU Acceleration Experiments: Vulkan & VideoCore VI
 
-We attempted to utilize the Raspberry Pi 4's integrated **VideoCore VI GPU** for compute acceleration using the **Vulkan** API provided by `sherpa-onnx` and `ncnn`.
+We conducted extensive experiments attempting to utilize the Raspberry Pi 4's integrated **VideoCore VI GPU** for compute acceleration using the **Vulkan** API. Our hypothesis was that offloading the heavy matrix multiplications required by the Whisper encoder to the GPU would free up the CPU for other tasks. We compiled `sherpa-onnx` and tested `pywhispercpp` configurations with Vulkan compute support.
 
-### The Experiment
-We compiled `sherpa-onnx` with Vulkan compute support to offload the matrix multiplications required by the Whisper encoder.
-
-### The Reality
-While technically functional, the VideoCore VI is primarily designed for 3D graphics (OpenGL ES), not general-purpose compute (GPGPU).
-*   **Driver Overhead:** The Mesa V3D driver stack added significant initialization latency.
-*   **Compute Power:** The GPU lacks the raw GFLOPS to compete with the quad-core CPU running highly optimized NEON SIMD instructions.
-*   **Memory Bandwidth:** Shared memory contention between CPU and GPU created bottlenecks.
-
-**Conclusion:** For the Raspberry Pi 4 specifically, **highly optimized CPU inference (Int8 Quantized) proved faster than GPU acceleration.** The overhead of moving data to the weak GPU outweighed the compute benefits.
+However, the reality of the hardware architecture proved different from our expectations. The VideoCore VI is primarily designed for 3D graphics (OpenGL ES) rather than general-purpose compute (GPGPU). The driver overhead introduced by the Mesa V3D stack added significant initialization latency. Furthermore, the GPU lacks the raw GFLOPS to compete with the quad-core CPU when the CPU is running highly optimized instructions. The shared memory architecture also meant that contention for memory bandwidth between the CPU and GPU created new bottlenecks. Consequently, we determined that **highly optimized CPU inference (Int8 Quantized) was significantly faster** than our GPU acceleration attempts for this specific workload. The overhead of moving data to and from the weak GPU outweighed the potential compute benefits.
 
 ---
 
@@ -72,29 +63,26 @@ While technically functional, the VideoCore VI is primarily designed for 3D grap
 Since hardware acceleration was limited, we focused on extreme software optimization.
 
 ### 1. Voice Activity Detection (VAD)
-*   **Standard Approach:** `webrtcvad` (Fast but less accurate) or PyTorch Silero (Heavy).
-*   **Our Choice:** **Silero VAD via ONNX Runtime**.
-*   **Why:** We use the `.onnx` export of Silero. Running this on the specialized `sherpa-onnx` runtime allows us to process audio chunks in milliseconds with negligible CPU usage, keeping the cores free for the heavy lifting (ASR).
 
-### 2. Automatic Speech Recognition (ASR)
-*   **Standard Approach:** OpenAI `whisper` (Python/PyTorch).
-*   **Bottleneck:** PyTorch is too heavy for RPi 4; Python GIL blocks real-time audio processing.
-*   **Our Choice:** **`pywhispercpp`** (Python bindings for `whisper.cpp`).
-*   **Optimization:**
-    *   **C++ Core:** The heavy inference runs in pure C++, bypassing Python's slowness.
-    *   **Quantization:** We use the `tiny` or `small` models quantized to **Int8**. This reduces memory usage by 4x and utilizes ARM NEON instructions for rapid inference.
-    *   **Greedy Decoding:** We disabled beam search (num_beams=1) to favor speed over marginally better accuracy.
+For detecting when a user is speaking, we chose **Silero VAD via ONNX Runtime**. While `webrtcvad` is faster, it is less robust to noise, and the standard PyTorch implementation of Silero is too heavy. By using the `.onnx` export of the Silero model running on the specialized `sherpa-onnx` runtime, we can process audio chunks in milliseconds. This approach incurs negligible CPU usage, keeping the cores free for the heavy lifting required by the ASR engine.
+
+### 2. Automatic Speech Recognition (ASR) with pywhispercpp & NEON
+
+The core of our speech recognition engine is built upon **`pywhispercpp`**, a Python binding for the highly optimized C++ port of OpenAI's Whisper model (`whisper.cpp`). Standard PyTorch implementations of Whisper are often too heavy for the Raspberry Pi's limited memory bandwidth and lack of hardware acceleration. The Python Global Interpreter Lock (GIL) also makes it difficult to achieve real-time performance with pure Python implementations.
+
+We compiled `pywhispercpp` specifically to leverage the **ARM NEON** instruction set available on the Cortex-A72. NEON provides Single Instruction Multiple Data (SIMD) capabilities, allowing the processor to perform the same mathematical operation on multiple data points simultaneously. This is crucial for the dense matrix multiplications inherent in neural network inference. By bypassing Python's slowness and running the heavy inference in pure C++ with NEON SIMD instructions, we achieve a dramatic speedup.
+
+We further optimized the model by employing **8-bit integer (Int8) quantization**. This reduces the precision of the model weights from 32-bit floating point to 8-bit integers. While this theoretically reduces accuracy, the impact on speech recognition quality is negligible for our use case. However, the performance gains are massive: it reduces memory usage by approximately 4x and significantly increases memory throughput, which is often the primary bottleneck on the Raspberry Pi 4. We also configured the decoder to use greedy decoding (disabling beam search) to favor raw speed over marginally better accuracy.
 
 ### 3. Text-to-Speech (TTS)
-*   **Standard Approach:** Google TTS (Online/Slow) or Tacotron2 (Too heavy).
-*   **Our Choice:** **Piper TTS (ONNX)**.
-*   **Why:** Piper uses the VITS architecture exported to ONNX. It is designed specifically for low-resource devices (like the Steam Deck or Pi). It generates high-quality Hindi speech locally with <200ms latency on an overclocked Pi 4.
 
-### 4. System Architecture: Multiprocessing
-To prevent audio stuttering while the CPU works on transcription:
-*   **Process 1 (Main):** Handles Audio I/O (Microphone/Speaker) and lightweight Logic.
-*   **Process 2 (Worker):** Dedicated isolated process for the ASR (Whisper) engine.
-*   **IPC:** We use `multiprocessing.Queue` to pass raw audio frames. This ensures that even if the CPU is 100% utilized transcribing the last sentence, the microphone recording loop in the main process never drops a frame.
+For speech synthesis, we selected **Piper TTS (ONNX)**. Unlike Google TTS which requires an internet connection and introduces network latency, or Tacotron2 which is too computationally expensive, Piper uses the VITS architecture exported to ONNX. It is designed specifically for low-resource devices like the Steam Deck or Raspberry Pi. It generates high-quality Hindi speech locally with less than 200ms latency on our overclocked hardware.
+
+### 4. System Architecture: Multithreading & Multiprocessing
+
+The Python Global Interpreter Lock (GIL) poses a significant challenge for real-time audio applications, as it prevents multiple native threads from executing Python bytecodes simultaneously. To circumvent this, we architected Ahin using a strict **multiprocess design**. The main process is dedicated entirely to lightweight, latency-sensitive I/O operations: it manages the microphone input stream, handles the speaker output, and updates the UI. This ensures that no matter how heavy the computational load becomes, the audio buffer never overflows or underflows, preventing the dreaded 'stuttering' audio.
+
+Heavy computational tasks—specifically the Voice Activity Detection (VAD) and Automatic Speech Recognition (ASR)—are offloaded to a **separate, isolated worker process**. We utilize `multiprocessing.Queue` as an Inter-Process Communication (IPC) mechanism to pass raw audio frames from the main process to the worker. This producer-consumer model allows the ASR engine to utilize the full power of the CPU cores without blocking the main event loop. While the worker crunches data using `pywhispercpp`, the main process remains responsive, listening for the next user input or handling cancellation requests. This architecture allows us to achieve true parallelism on the quad-core CPU.
 
 ## Summary of Latency Gains
 
