@@ -44,6 +44,7 @@ class VoiceAssistantFast:
             tts: Initialized TTS instance
             response_strategy: Strategy to generate responses
         """
+        print("<-- PYWHISPERCPP + SHERPA-ONNX Voice Assistant -->")
         self.config = config
         self.tts = tts
         self.response_strategy = response_strategy
@@ -158,20 +159,40 @@ class VoiceAssistantFast:
                 
                 # Resample if needed (input_rate -> 16kHz)
                 if resampler is not None:
+                    resample_start = time.perf_counter()
                     # Ensure float32 dtype for soxr
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
                     audio_data = resampler.resample_chunk(audio_data, last=False)
+                    resample_time = time.perf_counter() - resample_start
+                    # Only print occasionally to avoid spam (every 100 chunks)
+                    if hasattr(resampler, '_debug_count'):
+                        resampler._debug_count += 1
+                    else:
+                        resampler._debug_count = 1
+                    if resampler._debug_count % 100 == 0:
+                        print(f"⏱️  [Worker] Resample: {resample_time*1000:.2f}ms")
                 
                 # Feed to VAD (now at 16kHz if resampled)
+                vad_start = time.perf_counter()
                 vad.accept_waveform(audio_data)
+                vad_time = time.perf_counter() - vad_start
                 
                 # Check for detected speech segments
                 while not vad.empty():
+                    segment_start = time.perf_counter()
                     segment = vad.get_speech_segment()
+                    segment_time = time.perf_counter() - segment_start
+                    
                     if segment is not None and len(segment) > 0:
+                        segment_duration = len(segment) / asr_sample_rate
+                        print(f"⏱️  [Worker] VAD detected speech: {segment_duration:.2f}s segment, extraction: {segment_time*1000:.1f}ms")
+                        
                         # Transcribe (CPU-intensive) - audio segment is already at 16kHz
+                        asr_start = time.perf_counter()
                         model.transcribe(segment, new_segment_callback=transcribe_callback)
+                        asr_time = time.perf_counter() - asr_start
+                        print(f"⏱️  [Worker] ASR transcription: {asr_time*1000:.1f}ms (RTF: {asr_time/segment_duration:.2f}x)")
                         
         except Exception as e:
             print(f"Error in ASR worker: {e}")
@@ -201,9 +222,15 @@ class VoiceAssistantFast:
 
     def _handle_command(self, text: str):
         """Generate response and speak."""
+        total_start = time.perf_counter()
+        
         # Generate response
-        response = self.response_strategy.generate_response(text)
+        response_start = time.perf_counter()
+        matched, response = self.response_strategy.generate_response(text)
+        response_time = time.perf_counter() - response_start
+        
         print(f"[Response] {response}")
+        print(f"⏱️  Response generation: {response_time*1000:.1f}ms (matched: {matched})")
         
         if response:
             # TTS
@@ -212,7 +239,11 @@ class VoiceAssistantFast:
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 output_path = str(Path.cwd() / f"{timestamp}.mp3")
 
+            tts_start = time.perf_counter()
             result = self.tts.synthesize(response, output_path=output_path)
+            tts_time = time.perf_counter() - tts_start
+            print(f"⏱️  TTS synthesis: {tts_time*1000:.1f}ms")
+            
             if result:
                 audio, sample_rate = result
                 print(f"[TTS] Playing...")
@@ -222,18 +253,26 @@ class VoiceAssistantFast:
                 self.tts_playing.set()
                 
                 # Drain the audio queue to clear old buffered audio
+                drain_start = time.perf_counter()
                 try:
                     while True:
                         self.audio_queue.get_nowait()
                 except queue.Empty:
                     pass
+                drain_time = time.perf_counter() - drain_start
                 
+                playback_start = time.perf_counter()
                 sd.play(audio, sample_rate)
                 sd.wait()
+                playback_time = time.perf_counter() - playback_start
+                print(f"⏱️  Audio playback: {playback_time*1000:.1f}ms")
                 
                 # Small buffer to ensure we don't catch the tail or echo
                 time.sleep(0.2)
                 self.tts_playing.clear()
+        
+        total_time = time.perf_counter() - total_start
+        print(f"⏱️  TOTAL pipeline: {total_time*1000:.1f}ms\n")
 
     def run(self):
         """Start the assistant."""

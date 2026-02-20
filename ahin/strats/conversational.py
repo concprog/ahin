@@ -28,21 +28,19 @@ class ConversationalStrategy:
             ("बाय", ["बाय बाय!", "फिर मिलते हैं।"]),
             # Add more patterns here matches against joined text
         ]
-        
-        self.default_responses = [
-            "माफ़ कीजिये, मैं समझ नहीं पाया।",
-            "क्या आप फिर से बोलेंगे?",
-            "हम्म, यह मेरे समझ से बाहर है।",
-            "थोड़ा और साफ़ बोलेंगे?"
-        ]
 
-    def generate_response(self, text: str) -> str:
+    def generate_response(self, text: str) -> Tuple[bool, str]:
         """
         Generate a response based on the input text.
         Matches patterns against joined text (spaces removed).
+        
+        Returns:
+            Tuple of (matched: bool, response: str)
+            - matched: True if a pattern was found, False otherwise
+            - response: The matched response, or empty string if no match
         """
         if not text:
-            return ""
+            return (False, "")
             
         # Join text to match patterns robustly against ASR variations
         cleaned_text = "".join(text.split())
@@ -50,7 +48,7 @@ class ConversationalStrategy:
         # Check for matches
         for pattern, responses in self.patterns:
             if pattern in cleaned_text:
-                return random.choice(responses)
+                return (True, random.choice(responses))
                 
-        # Fallback
-        return random.choice(self.default_responses)
+        # No match found
+        return (False, "")

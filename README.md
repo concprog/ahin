@@ -58,6 +58,7 @@ uv run main.py
 - [ARM Optimization & Hardware Tuning](ARMOPT.md): Technical details on optimizing for Raspberry Pi 4, overclocking, and performance comparisons.
 - [Usage and Configuration](USAGE.md): Detailed documentation on project files and configuration settings.
 - [Credits and Acknowledgments](CREDITS.md): Attribution for libraries and models used in the project.
+- [Future Enhancements](FUTURE.md): Ideas for improving performance and quality.
 
 ## System Architecture
 

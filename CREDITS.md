@@ -37,6 +37,17 @@ This project stands on the shoulders of giants. We are grateful to the open-sour
 *   **`webrtcvad`**: Python interface to the WebRTC Voice Activity Detector.
     *   [GitHub](https://github.com/wiseman/py-webrtcvad)
 
+*   **Arm Kleidi Libraries**: Libraries providing optimized primitives for Arm platforms.
+    *   [Arm Kleidi](https://developer.arm.com/downloads/-/arm-kleidi)
+*   **Arm Compute Library**: A comprehensive set of optimized computer vision and machine learning functions for Arm CPUs and GPUs.
+    *   [Arm Compute Library](https://developer.arm.com/ip-products/processors/gpu/mali-gpus/developer-resources/mali-performance-libraries/arm-compute-library)
+*   **Arm NN SDK**: A machine learning inference engine that bridges existing neural network frameworks to Arm IP.
+    *   [Arm NN](https://developer.arm.com/ip-products/processors/machine-learning/arm-nn)
+*   **CMSIS-NN**: Efficient neural network kernels for ARM Cortex-M microcontrollers.
+    *   [CMSIS-NN](https://developer.arm.com/embedded/cmsis/cmsis-nn)
+*   **Arm Performance Libraries**: Optimized standard numerical libraries for HPC on Arm.
+    *   [Arm Performance Libraries](https://developer.arm.com/tools-and-software/server-and-hpc/arm-performance-libraries)
+
 ## Models
 
 The following models are integral to the functionality of Ahin:

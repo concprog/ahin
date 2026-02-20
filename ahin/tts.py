@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, Tuple
 import numpy as np
 import soundfile as sf
 import sys
+import time
 
 try:
     import sherpa_onnx
@@ -59,18 +60,26 @@ class PiperTTS:
         Returns:
             Tuple of (audio_samples, sample_rate) or None if synthesis failed
         """
+        synth_start = time.perf_counter()
         audio = self.tts.generate(text, sid=0, speed=self.speed)
+        synth_time = time.perf_counter() - synth_start
         
         if len(audio.samples) == 0:
             print("TTS synthesis failed")
             return None
+        
+        audio_duration = len(audio.samples) / audio.sample_rate
+        rtf = synth_time / audio_duration if audio_duration > 0 else 0
+        print(f"⏱️  [TTS Sherpa] Synthesis: {synth_time*1000:.1f}ms for {audio_duration:.2f}s audio (RTF: {rtf:.2f}x)")
             
         if output_path:
             # We don't want to fail if soundfile is not available or path is invalid, 
             # but we should try to save if requested
             try:
+                save_start = time.perf_counter()
                 sf.write(output_path, audio.samples, samplerate=audio.sample_rate, subtype="PCM_16")
-                print(f"Saved TTS audio to {output_path}")
+                save_time = time.perf_counter() - save_start
+                print(f"Saved TTS audio to {output_path} ({save_time*1000:.1f}ms)")
             except Exception as e:
                 print(f"Error saving TTS audio: {e}")
             
@@ -166,20 +175,28 @@ class PiperOnnxTTS:
         # For now we cast to Any to avoid lint error if we are sure it works or just leave it.
         # But wait, looking at the snippet `create('Hello world from Piper!', speaker_id=voices['awb'])`
         
+        synth_start = time.perf_counter()
         if speaker_id is None:
              samples, sample_rate = self.piper.create(text)
         else:
              samples, sample_rate = self.piper.create(text, speaker_id=speaker_id)
+        synth_time = time.perf_counter() - synth_start
         
         # Convert to float32 for compatibility with sounddevice if it's int16
         if samples.dtype == np.int16:
             samples = samples.astype(np.float32) / 32768.0
 
+        audio_duration = len(samples) / sample_rate
+        rtf = synth_time / audio_duration if audio_duration > 0 else 0
+        print(f"⏱️  [TTS Piper-ONNX] Synthesis: {synth_time*1000:.1f}ms for {audio_duration:.2f}s audio (RTF: {rtf:.2f}x)")
+
         if output_path:
             try:
                 # Save using soundfile
+                save_start = time.perf_counter()
                 sf.write(output_path, samples, samplerate=sample_rate)
-                print(f"Saved Piper-ONNX audio to {output_path}")
+                save_time = time.perf_counter() - save_start
+                print(f"Saved Piper-ONNX audio to {output_path} ({save_time*1000:.1f}ms)")
             except Exception as e:
                 print(f"Error saving TTS audio: {e}")
                 

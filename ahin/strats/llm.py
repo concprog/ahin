@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 import os
 from dotenv import load_dotenv
 
@@ -12,6 +12,7 @@ from ahin.core import ResponseStrategyProtocol
 class ConversationalStrategy:
     """
     Response strategy that uses a local LLM (OpenAI compatible) to generate responses.
+    This strategy always matches (returns True) and attempts to generate a response.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -48,12 +49,17 @@ class ConversationalStrategy:
         )
         self.system_prompt = llm_config.get("system_prompt", default_system_prompt)
 
-    def generate_response(self, text: str) -> str:
+    def generate_response(self, text: str) -> Tuple[bool, str]:
         """
         Generate a response using the LLM.
+        Always returns True (matched) as the LLM can handle any input.
+        
+        Returns:
+            Tuple of (True, llm_response) on success
+            Tuple of (False, error_message) on failure
         """
         if not text or not text.strip():
-            return ""
+            return (False, "")
             
         try:
             messages = [
@@ -78,8 +84,10 @@ class ConversationalStrategy:
                     full_response.append(content)
             print() # Ensure newline after stream
             
-            return "".join(full_response).strip()
+            response = "".join(full_response).strip()
+            return (True, response)
             
         except Exception as e:
             print(f"LLM Error: {e}")
-            return "माफ़ कीजिये, अभी मैं जवाब नहीं दे पा रहा हूँ।" # "Sorry, I cannot answer right now."
+            # Return False to indicate failure, allowing fallback to next strategy
+            return (False, "माफ़ कीजिये, अभी मैं जवाब नहीं दे पा रहा हूँ।") # "Sorry, I cannot answer right now."

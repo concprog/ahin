@@ -16,7 +16,16 @@ def singleton(cls):
 
 
 class ResponseStrategyProtocol(Protocol):
-    def generate_response(self, text: str) -> str: ...
+    def generate_response(self, text: str) -> Tuple[bool, str]:
+        """
+        Generate a response based on the input text.
+        
+        Returns:
+            Tuple of (matched: bool, response: str)
+            - matched: True if the strategy successfully matched and handled the input
+            - response: The generated response text
+        """
+        ...
 
 
 class VoiceActivityDetectorProtocol(Protocol):
